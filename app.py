@@ -173,7 +173,7 @@ TEMPLATE = """
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Ice Plant Network</title>
+    <title>3JMCO Hive</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -328,7 +328,7 @@ TEMPLATE = """
             <img src="{{ url_for('static', filename='images/logo.png') }}" alt="logo">
             <div style="color:#fff;">
                 <div><b>Ice Plant Network</b></div>
-                <div class="small">Connect with owners, services, materials & projects</div>
+                <div class="small"><b>Stainless Steel Fabrication Service.</b> Connect with owners, services, materials & projects</div>
             </div>
         </div>
         <div class="nav">
@@ -1503,5 +1503,6 @@ def settings_page():
 
 if __name__ == "__main__":
     app.run(debug=True)
+
 
 
