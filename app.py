@@ -13,18 +13,15 @@ from flask import (
 )
 from werkzeug.utils import secure_filename
 
-# ---------- APP & CONFIG ----------
-
-app = Flask(__name__)
-app.secret_key = "iceplantsecret_123"
-
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, "database.db")
 
 UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads")
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 
+app = Flask(__name__)
+app.secret_key = "iceplantsecret_123"
+app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 
 # ---------- DATABASE SETUP ----------
 
@@ -542,17 +539,24 @@ def home():
             {% else %}
                 <p>No posts yet.</p>
             {% endif %}
-
+            
             {% if user %}
             <h4>Create a post</h4>
             <form method="POST" action="{{ url_for('create_post') }}" enctype="multipart/form-data">
                 <textarea name="content" placeholder="Share something..."></textarea>
-                <input type="file" name="image_url" accept="image/*">
+
+                <label class="small">Upload image from device:</label>
+                <input type="file" name="image_file" accept="image/*">
+
+                <label class="small">Or paste image link (Google Drive, Dropbox, OneDrive, Imgur, etc.):</label>
+                <input name="image_url" placeholder="https://...">
+
                 <button type="submit">Post</button>
             </form>
             {% else %}
             <p class="small">Login to post updates.</p>
             {% endif %}
+
         </div>
     </div>
     """
@@ -681,7 +685,13 @@ def login_page():
 
                     <input name="contact" placeholder="Contact Number">
                     <input name="location" placeholder="Location / City">
-                    <input type="file" name="profile_image" accept="image/*">
+
+                    <label class="small">Upload profile image from device:</label>
+                    <input type="file" name="profile_image_file" accept="image/*">
+
+                    <label class="small">Or paste profile image link (Drive/Dropbox/OneDrive/etc.):</label>
+                    <input name="profile_image_url" placeholder="https://...">
+
                     <input name="website" placeholder="Main website (optional)">
                     <textarea name="bio" placeholder="Short bio (what you do)"></textarea>
                     <button type="submit">Register & Login</button>
@@ -692,7 +702,6 @@ def login_page():
     """
     return render_page("auth", body)
 
-
 @app.route("/register", methods=["POST"])
 def register():
     username = request.form["username"].strip()
@@ -702,7 +711,12 @@ def register():
     website = request.form.get("website", "").strip()
     bio = request.form.get("bio", "").strip()
 
-    profile_image = save_uploaded_file("profile_image", "profiles") or ""
+    # Profile image: try file first, then URL
+    file_path = save_uploaded_file("profile_image_file", "profiles")
+    if file_path:
+        profile_image = file_path
+    else:
+        profile_image = request.form.get("profile_image_url", "").strip()
 
     if not username or not password:
         flash("Username and password are required.", "error")
@@ -731,7 +745,6 @@ def register():
 
         c.execute("SELECT id FROM users WHERE username=?", (username,))
         user_id = c.fetchone()[0]
-
         c.execute(
             "INSERT INTO settings (user_id, show_contact, allow_messages, dark_theme) VALUES (?,?,?,?)",
             (user_id, 1, 1, 0),
@@ -802,7 +815,13 @@ def icecans():
             <input name="location" placeholder="Location (for map search)" required>
             <input name="capacity" placeholder="Capacity (e.g., 10 tons/day)">
             <input name="quote" placeholder="Quotation / Offer (optional)">
-            <input type="file" name="image_url" accept="image/*">
+
+            <label class="small">Upload image from device:</label>
+            <input type="file" name="image_file" accept="image/*">
+
+            <label class="small">Or paste image link (Drive, Dropbox, OneDrive, etc.):</label>
+            <input name="image_url" placeholder="https://...">
+
             <button type="submit">Publish service</button>
         </form>
         {% else %}
@@ -828,7 +847,6 @@ def icecans():
     """
     return render_page("icecans", body, icecans=icecans)
 
-
 @app.route("/icecans/create", methods=["POST"])
 def create_icecan():
     if not require_login():
@@ -841,7 +859,12 @@ def create_icecan():
     capacity = request.form.get("capacity", "").strip()
     quote = request.form.get("quote", "").strip()
 
-    image_url = save_uploaded_file("image_url", "icecans") or ""
+    # File first
+    file_path = save_uploaded_file("image_file", "icecans")
+    if file_path:
+        image_url = file_path
+    else:
+        image_url = request.form.get("image_url", "").strip()
 
     db = get_db()
     c = db.cursor()
@@ -865,7 +888,6 @@ def create_icecan():
     db.close()
     flash("Ice can / service created.", "info")
     return redirect(url_for("icecans"))
-
 
 @app.route("/icecans/<int:icecan_id>")
 def icecan_detail(icecan_id):
@@ -1239,7 +1261,15 @@ def create_post():
         return redirect(url_for("login_page"))
     user = current_user()
     content = request.form.get("content", "").strip()
-    image_url = save_uploaded_file("image_url", "posts") or ""
+
+    # Try file upload first
+    file_path = save_uploaded_file("image_file", "posts")
+    # If no file, try URL from form
+    if file_path:
+        image_url = file_path
+    else:
+        image_url = request.form.get("image_url", "").strip()
+
     if not content:
         flash("Post content cannot be empty.", "error")
         return redirect(url_for("home"))
@@ -1254,7 +1284,6 @@ def create_post():
     db.close()
     flash("Post created.", "info")
     return redirect(url_for("home"))
-
 
 # ---------- WEBSITES & MATERIALS ----------
 
@@ -1564,4 +1593,3 @@ def settings_page():
 
 if __name__ == "__main__":
     app.run(debug=True)
-
