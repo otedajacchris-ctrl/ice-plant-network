@@ -1,12 +1,16 @@
+import os
 from flask import Flask, render_template_string, request, redirect, session, flash, url_for
-import sqlite3
+import psycopg2
+from psycopg2 import IntegrityError
 
 app = Flask(__name__)
 app.secret_key = "iceplantsecret_123"  # needed for session + flash messages
 
 # ---------- DATABASE SETUP ----------
+
 def get_db():
-    return sqlite3.connect("database.db")
+    # DATABASE_URL is set in Render → Environment tab
+    return psycopg2.connect(os.environ["DATABASE_URL"])
 
 def init_db():
     db = get_db()
@@ -14,7 +18,7 @@ def init_db():
 
     c.execute("""
     CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id SERIAL PRIMARY KEY,
         username TEXT UNIQUE,
         password TEXT,
         contact TEXT
@@ -23,7 +27,7 @@ def init_db():
 
     c.execute("""
     CREATE TABLE IF NOT EXISTS posts (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id SERIAL PRIMARY KEY,
         title TEXT,
         location TEXT,
         capacity TEXT,
@@ -51,14 +55,13 @@ TEMPLATE = """
             background-size: cover;
             margin: 0;
         }
-
         .container {
             width: 95%;
             max-width: 800px;
             margin: 40px auto;
         }
         .card {
-            background: #ffffff;
+            background: #ffffffcc;
             border-radius: 12px;
             padding: 20px;
             margin-bottom: 20px;
@@ -94,6 +97,7 @@ TEMPLATE = """
             padding: 10px;
             border-radius: 8px;
             margin-top: 10px;
+            background: #ffffff;
         }
         a {
             color: #0f9b0f;
@@ -128,7 +132,6 @@ TEMPLATE = """
             <img src="{{ url_for('static', filename='images/logo.png') }}"
                  style="max-width:180px; margin-bottom:10px;">
         </div>
-
 
         <div class="messages">
             {% with msgs = get_flashed_messages(with_categories=True) %}
@@ -209,7 +212,8 @@ TEMPLATE = """
 def index():
     db = get_db()
     c = db.cursor()
-    posts = c.execute("SELECT * FROM posts ORDER BY id DESC").fetchall()
+    c.execute("SELECT * FROM posts ORDER BY id DESC")
+    posts = c.fetchall()
     db.close()
     return render_template_string(TEMPLATE, posts=posts)
 
@@ -226,12 +230,15 @@ def register():
     db = get_db()
     c = db.cursor()
     try:
-        c.execute("INSERT INTO users (username, password, contact) VALUES (?,?,?)",
-                  (username, password, contact))
+        c.execute(
+            "INSERT INTO users (username, password, contact) VALUES (%s,%s,%s)",
+            (username, password, contact),
+        )
         db.commit()
         session["user"] = username  # auto-login
         flash("Registration successful. You are now logged in.", "info")
-    except sqlite3.IntegrityError:
+    except IntegrityError:
+        db.rollback()
         flash("Username already exists. Please choose another.", "error")
     finally:
         db.close()
@@ -245,8 +252,11 @@ def login():
 
     db = get_db()
     c = db.cursor()
-    user = c.execute("SELECT * FROM users WHERE username=? AND password=?",
-                     (username, password)).fetchone()
+    c.execute(
+        "SELECT * FROM users WHERE username=%s AND password=%s",
+        (username, password),
+    )
+    user = c.fetchone()
     db.close()
 
     if user:
@@ -281,15 +291,18 @@ def post():
 
     db = get_db()
     c = db.cursor()
-    c.execute("INSERT INTO posts (title, location, capacity, offer, owner, contact) VALUES (?,?,?,?,?,?)",
-              (title, location, capacity, offer, session["user"], contact))
+    c.execute(
+        """
+        INSERT INTO posts (title, location, capacity, offer, owner, contact)
+        VALUES (%s,%s,%s,%s,%s,%s)
+        """,
+        (title, location, capacity, offer, session["user"], contact),
+    )
     db.commit()
     db.close()
 
     flash("Ice plant post created successfully.", "info")
     return redirect("/")
 
-# ---------- RUN ----------
 if __name__ == "__main__":
-    app.run()
-
+    app.run(debug=True)
