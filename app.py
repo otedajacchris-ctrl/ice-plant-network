@@ -9,16 +9,24 @@ from flask import (
     session,
     flash,
     url_for,
+    send_from_directory,
 )
+from werkzeug.utils import secure_filename
+
+# ---------- APP & CONFIG ----------
 
 app = Flask(__name__)
 app.secret_key = "iceplantsecret_123"
 
-# ---------- DATABASE SETUP ----------
-
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, "database.db")
 
+UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads")
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
+
+
+# ---------- DATABASE SETUP ----------
 
 def get_db():
     return sqlite3.connect(DB_PATH)
@@ -396,15 +404,12 @@ def current_user():
 
 
 def render_page(tab, body_html, **kwargs):
-    # 1) Render the inner body template with its variables
     inner_html = render_template_string(
         body_html,
         tab=tab,
         user=current_user(),
         **kwargs
     )
-
-    # 2) Put that rendered HTML inside the main TEMPLATE
     return render_template_string(
         TEMPLATE,
         tab=tab,
@@ -418,6 +423,39 @@ def require_login():
         flash("You must be logged in to do that.", "error")
         return False
     return True
+
+
+def save_uploaded_file(field_name, subfolder=""):
+    """
+    Saves an uploaded file from request.files[field_name] into uploads/subfolder
+    and returns a URL path like /uploads/subfolder/filename.ext
+    or None if no file was uploaded.
+    """
+    file = request.files.get(field_name)
+    if not file or file.filename == "":
+        return None
+
+    filename = secure_filename(file.filename)
+
+    folder = app.config["UPLOAD_FOLDER"]
+    if subfolder:
+        folder = os.path.join(folder, subfolder)
+    os.makedirs(folder, exist_ok=True)
+
+    ts = datetime.utcnow().strftime("%Y%m%d%H%M%S%f")
+    name, ext = os.path.splitext(filename)
+    filename = f"{ts}_{name}{ext}"
+
+    filepath = os.path.join(folder, filename)
+    file.save(filepath)
+
+    rel = f"{subfolder}/{filename}" if subfolder else filename
+    return f"/uploads/{rel}"
+
+
+@app.route("/uploads/<path:filename>")
+def uploaded_file(filename):
+    return send_from_directory(app.config["UPLOAD_FOLDER"], filename)
 
 
 # ---------- ROUTES: HOME / SEARCH / AUTH ----------
@@ -491,9 +529,9 @@ def home():
 
             {% if user %}
             <h4>Create a post</h4>
-            <form method="POST" action="{{ url_for('create_post') }}">
+            <form method="POST" action="{{ url_for('create_post') }}" enctype="multipart/form-data">
                 <textarea name="content" placeholder="Share something..."></textarea>
-                <input name="image_url" placeholder="Image URL (optional)">
+                <input type="file" name="image_url" accept="image/*">
                 <button type="submit">Post</button>
             </form>
             {% else %}
@@ -513,7 +551,6 @@ def search():
     db = get_db()
     c = db.cursor()
 
-    # owners
     c.execute(
         "SELECT id, username, location FROM users "
         "WHERE username LIKE ? OR location LIKE ? OR created_at LIKE ? "
@@ -522,7 +559,6 @@ def search():
     )
     owners = c.fetchall()
 
-    # icecans
     c.execute(
         "SELECT i.id, i.title, i.location, i.capacity, u.username "
         "FROM icecans i JOIN users u ON u.id = i.owner_id "
@@ -532,7 +568,6 @@ def search():
     )
     icecans = c.fetchall()
 
-    # posts
     c.execute(
         "SELECT p.id, p.content, p.image_url, p.created_at, u.username, u.id "
         "FROM posts p JOIN users u ON u.id = p.owner_id "
@@ -591,6 +626,8 @@ def search():
     return render_page("home", body, q=q, owners=owners, icecans=icecans, posts=posts)
 
 
+# ---------- AUTH ----------
+
 @app.route("/auth")
 def login_page():
     body = """
@@ -607,12 +644,12 @@ def login_page():
             </div>
             <div class="half">
                 <h3>Register</h3>
-                <form method="POST" action="{{ url_for('register') }}">
+                <form method="POST" action="{{ url_for('register') }}" enctype="multipart/form-data">
                     <input name="username" placeholder="Username" required>
                     <input name="password" type="password" placeholder="Password" required>
                     <input name="contact" placeholder="Contact Number">
                     <input name="location" placeholder="Location / City">
-                    <input name="profile_image" placeholder="Profile image URL (optional)">
+                    <input type="file" name="profile_image" accept="image/*">
                     <input name="website" placeholder="Main website (optional)">
                     <textarea name="bio" placeholder="Short bio (what you do)"></textarea>
                     <button type="submit">Register & Login</button>
@@ -630,9 +667,10 @@ def register():
     password = request.form["password"].strip()
     contact = request.form.get("contact", "").strip()
     location = request.form.get("location", "").strip()
-    profile_image = request.form.get("profile_image", "").strip()
     website = request.form.get("website", "").strip()
     bio = request.form.get("bio", "").strip()
+
+    profile_image = save_uploaded_file("profile_image", "profiles") or ""
 
     if not username or not password:
         flash("Username and password are required.", "error")
@@ -659,10 +697,9 @@ def register():
         )
         db.commit()
 
-        # get id
         c.execute("SELECT id FROM users WHERE username=?", (username,))
         user_id = c.fetchone()[0]
-        # default settings
+
         c.execute(
             "INSERT INTO settings (user_id, show_contact, allow_messages, dark_theme) VALUES (?,?,?,?)",
             (user_id, 1, 1, 0),
@@ -709,7 +746,6 @@ def logout():
 
 # ---------- ICE CANS / SERVICES ----------
 
-
 @app.route("/icecans")
 def icecans():
     db = get_db()
@@ -728,13 +764,13 @@ def icecans():
 
         {% if user %}
         <h3>Create new ice can / service</h3>
-        <form method="POST" action="{{ url_for('create_icecan') }}">
+        <form method="POST" action="{{ url_for('create_icecan') }}" enctype="multipart/form-data">
             <input name="title" placeholder="Title / Service name" required>
             <textarea name="description" placeholder="Description"></textarea>
             <input name="location" placeholder="Location (for map search)" required>
             <input name="capacity" placeholder="Capacity (e.g., 10 tons/day)">
             <input name="quote" placeholder="Quotation / Offer (optional)">
-            <input name="image_url" placeholder="Image URL (optional)">
+            <input type="file" name="image_url" accept="image/*">
             <button type="submit">Publish service</button>
         </form>
         {% else %}
@@ -772,7 +808,8 @@ def create_icecan():
     location = request.form.get("location", "").strip()
     capacity = request.form.get("capacity", "").strip()
     quote = request.form.get("quote", "").strip()
-    image_url = request.form.get("image_url", "").strip()
+
+    image_url = save_uploaded_file("image_url", "icecans") or ""
 
     db = get_db()
     c = db.cursor()
@@ -927,7 +964,6 @@ def toggle_interested(icecan_id):
 
 # ---------- OWNERS / PROFILES ----------
 
-
 @app.route("/owners")
 def owners():
     db = get_db()
@@ -997,7 +1033,6 @@ def profile(user_id):
     )
     posts = c.fetchall()
 
-    # followers & following count
     c.execute(
         "SELECT COUNT(*) FROM follows WHERE followed_id=?", (user_id,)
     )
@@ -1009,7 +1044,6 @@ def profile(user_id):
 
     db.close()
 
-    # is current user following?
     user = current_user()
     is_following = False
     if user:
@@ -1167,14 +1201,13 @@ def toggle_follow(user_id):
 
 # ---------- POSTS ----------
 
-
 @app.route("/posts/create", methods=["POST"])
 def create_post():
     if not require_login():
         return redirect(url_for("login_page"))
     user = current_user()
     content = request.form.get("content", "").strip()
-    image_url = request.form.get("image_url", "").strip()
+    image_url = save_uploaded_file("image_url", "posts") or ""
     if not content:
         flash("Post content cannot be empty.", "error")
         return redirect(url_for("home"))
@@ -1192,7 +1225,6 @@ def create_post():
 
 
 # ---------- WEBSITES & MATERIALS ----------
-
 
 @app.route("/websites", methods=["GET", "POST"])
 def websites_page():
@@ -1330,7 +1362,6 @@ def materials_page():
 
 # ---------- MESSENGER ----------
 
-
 @app.route("/messages")
 def messages_page():
     if not require_login():
@@ -1341,7 +1372,6 @@ def messages_page():
     db = get_db()
     c = db.cursor()
 
-    # conversation list (users you talked to)
     c.execute(
         "SELECT DISTINCT "
         "CASE WHEN sender_id=? THEN receiver_id ELSE sender_id END AS other_id "
@@ -1447,7 +1477,6 @@ def send_message(user_id):
 
 # ---------- SETTINGS ----------
 
-
 @app.route("/settings", methods=["GET", "POST"])
 def settings_page():
     if not require_login():
@@ -1503,7 +1532,3 @@ def settings_page():
 
 if __name__ == "__main__":
     app.run(debug=True)
-
-
-
-
