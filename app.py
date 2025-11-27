@@ -1,4 +1,4 @@
-from flask import Flask, render_template_string, request, redirect, session, flash
+from flask import Flask, render_template_string, request, redirect, session, flash, url_for
 import sqlite3
 
 app = Flask(__name__)
@@ -47,9 +47,11 @@ TEMPLATE = """
     <style>
         body {
             font-family: Arial, sans-serif;
-            background: linear-gradient(135deg, #0f9b0f, #00ff88);
+            background: url("{{ url_for('static', filename='images/background.png') }}") no-repeat center center fixed;
+            background-size: cover;
             margin: 0;
         }
+
         .container {
             width: 95%;
             max-width: 800px;
@@ -122,7 +124,11 @@ TEMPLATE = """
 <body>
 <div class="container">
     <div class="card">
-        <h1>🧊 Ice Plant Social Network</h1>
+        <div style="text-align:center;">
+            <img src="{{ url_for('static', filename='images/logo.png') }}"
+                 style="max-width:180px; margin-bottom:10px;">
+        </div>
+
 
         <div class="messages">
             {% with msgs = get_flashed_messages(with_categories=True) %}
@@ -286,3 +292,4 @@ def post():
 # ---------- RUN ----------
 if __name__ == "__main__":
     app.run()
+
