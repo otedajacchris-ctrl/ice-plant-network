@@ -177,7 +177,7 @@ TEMPLATE = """
     <style>
         body {
             font-family: Arial, sans-serif;
-            background: url("{{ url_for('static', filename='images/background.jpg') }}") no-repeat center center fixed;
+            background: url("{{ url_for('static', filename='images/background.png') }}") no-repeat center center fixed;
             background-size: cover;
             margin: 0;
         }
@@ -1503,4 +1503,5 @@ def settings_page():
 
 if __name__ == "__main__":
     app.run(debug=True)
+
 
