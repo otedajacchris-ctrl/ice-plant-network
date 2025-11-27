@@ -327,7 +327,7 @@ TEMPLATE = """
         <div class="logo">
             <img src="{{ url_for('static', filename='images/logo.png') }}" alt="logo">
             <div style="color:#fff;">
-                <div><b>Ice Plant Network</b></div>
+                <div><b>3JMCO hive</b></div>
                 <div class="small"><b>Stainless Steel Fabrication Service.</b> Connect with owners, services, materials & projects</div>
             </div>
         </div>
@@ -1503,6 +1503,7 @@ def settings_page():
 
 if __name__ == "__main__":
     app.run(debug=True)
+
 
 
 
