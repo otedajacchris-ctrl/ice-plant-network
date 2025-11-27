@@ -326,6 +326,22 @@ TEMPLATE = """
             margin-right: 6px;
         }
     </style>
+    <script>
+        function togglePassword(fieldId, toggleId) {
+            const field = document.getElementById(fieldId);
+            const toggle = document.getElementById(toggleId);
+            if (!field) return;
+
+            if (field.type === "password") {
+                field.type = "text";
+                if (toggle) toggle.textContent = "Hide";
+            } else {
+                field.type = "password";
+                if (toggle) toggle.textContent = "Show";
+            }
+        }
+    </script>
+
 </head>
 <body>
 <div class="page">
@@ -638,7 +654,15 @@ def login_page():
                 <h3>Login</h3>
                 <form method="POST" action="{{ url_for('login') }}">
                     <input name="username" placeholder="Username" required>
-                    <input name="password" type="password" placeholder="Password" required>
+
+                    <input id="login_password" name="password" type="password" placeholder="Password" required>
+                    <button type="button"
+                            id="login_toggle"
+                            style="width:auto; display:inline-block; margin-top:6px; margin-bottom:6px;"
+                            onclick="togglePassword('login_password','login_toggle')">
+                        Show
+                    </button>
+
                     <button type="submit">Login</button>
                 </form>
             </div>
@@ -646,7 +670,15 @@ def login_page():
                 <h3>Register</h3>
                 <form method="POST" action="{{ url_for('register') }}" enctype="multipart/form-data">
                     <input name="username" placeholder="Username" required>
-                    <input name="password" type="password" placeholder="Password" required>
+
+                    <input id="register_password" name="password" type="password" placeholder="Password" required>
+                    <button type="button"
+                            id="register_toggle"
+                            style="width:auto; display:inline-block; margin-top:6px; margin-bottom:6px;"
+                            onclick="togglePassword('register_password','register_toggle')">
+                        Show
+                    </button>
+
                     <input name="contact" placeholder="Contact Number">
                     <input name="location" placeholder="Location / City">
                     <input type="file" name="profile_image" accept="image/*">
@@ -1532,3 +1564,4 @@ def settings_page():
 
 if __name__ == "__main__":
     app.run(debug=True)
+
