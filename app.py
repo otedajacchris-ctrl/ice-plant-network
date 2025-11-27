@@ -1,6 +1,6 @@
 import os
+import sqlite3
 from datetime import datetime
-
 from flask import (
     Flask,
     render_template_string,
@@ -10,18 +10,18 @@ from flask import (
     flash,
     url_for,
 )
-import psycopg2
-from psycopg2 import IntegrityError
 
 app = Flask(__name__)
-app.secret_key = "iceplantsecret_123"  # needed for session + flash messages
+app.secret_key = "iceplantsecret_123"
 
 # ---------- DATABASE SETUP ----------
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.path.join(BASE_DIR, "database.db")
+
 
 def get_db():
-    # DATABASE_URL is set in Render → Environment tab
-    return psycopg2.connect(os.environ["DATABASE_URL"])
+    return sqlite3.connect(DB_PATH)
 
 
 def init_db():
@@ -32,7 +32,7 @@ def init_db():
     c.execute(
         """
         CREATE TABLE IF NOT EXISTS users (
-            id SERIAL PRIMARY KEY,
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE,
             password TEXT,
             contact TEXT,
@@ -42,112 +42,123 @@ def init_db():
             website TEXT,
             created_at TEXT
         )
-        """
+    """
     )
 
     # Ice cans / services / projects
     c.execute(
         """
         CREATE TABLE IF NOT EXISTS icecans (
-            id SERIAL PRIMARY KEY,
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
             title TEXT,
             description TEXT,
             location TEXT,
             capacity TEXT,
             quote TEXT,
             image_url TEXT,
-            owner_id INTEGER REFERENCES users(id),
-            created_at TEXT
+            owner_id INTEGER,
+            created_at TEXT,
+            FOREIGN KEY(owner_id) REFERENCES users(id)
         )
-        """
+    """
     )
 
     # Follows (user → user)
     c.execute(
         """
         CREATE TABLE IF NOT EXISTS follows (
-            follower_id INTEGER REFERENCES users(id),
-            followed_id INTEGER REFERENCES users(id),
+            follower_id INTEGER,
+            followed_id INTEGER,
             created_at TEXT,
-            PRIMARY KEY (follower_id, followed_id)
+            PRIMARY KEY (follower_id, followed_id),
+            FOREIGN KEY(follower_id) REFERENCES users(id),
+            FOREIGN KEY(followed_id) REFERENCES users(id)
         )
-        """
+    """
     )
 
     # Interested (user bookmarks ice can)
     c.execute(
         """
         CREATE TABLE IF NOT EXISTS interested (
-            user_id INTEGER REFERENCES users(id),
-            icecan_id INTEGER REFERENCES icecans(id),
+            user_id INTEGER,
+            icecan_id INTEGER,
             created_at TEXT,
-            PRIMARY KEY (user_id, icecan_id)
+            PRIMARY KEY (user_id, icecan_id),
+            FOREIGN KEY(user_id) REFERENCES users(id),
+            FOREIGN KEY(icecan_id) REFERENCES icecans(id)
         )
-        """
+    """
     )
 
     # Direct messages
     c.execute(
         """
         CREATE TABLE IF NOT EXISTS messages (
-            id SERIAL PRIMARY KEY,
-            sender_id INTEGER REFERENCES users(id),
-            receiver_id INTEGER REFERENCES users(id),
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sender_id INTEGER,
+            receiver_id INTEGER,
             content TEXT,
-            created_at TEXT
+            created_at TEXT,
+            FOREIGN KEY(sender_id) REFERENCES users(id),
+            FOREIGN KEY(receiver_id) REFERENCES users(id)
         )
-        """
+    """
     )
 
     # Websites (extra links)
     c.execute(
         """
         CREATE TABLE IF NOT EXISTS websites (
-            id SERIAL PRIMARY KEY,
-            owner_id INTEGER REFERENCES users(id),
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            owner_id INTEGER,
             url TEXT,
             description TEXT,
-            created_at TEXT
+            created_at TEXT,
+            FOREIGN KEY(owner_id) REFERENCES users(id)
         )
-        """
+    """
     )
 
     # Materials (for fabrication, supplies, etc.)
     c.execute(
         """
         CREATE TABLE IF NOT EXISTS materials (
-            id SERIAL PRIMARY KEY,
-            owner_id INTEGER REFERENCES users(id),
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            owner_id INTEGER,
             name TEXT,
             description TEXT,
-            created_at TEXT
+            created_at TEXT,
+            FOREIGN KEY(owner_id) REFERENCES users(id)
         )
-        """
+    """
     )
 
     # General posts with optional image
     c.execute(
         """
         CREATE TABLE IF NOT EXISTS posts (
-            id SERIAL PRIMARY KEY,
-            owner_id INTEGER REFERENCES users(id),
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            owner_id INTEGER,
             content TEXT,
             image_url TEXT,
-            created_at TEXT
+            created_at TEXT,
+            FOREIGN KEY(owner_id) REFERENCES users(id)
         )
-        """
+    """
     )
 
     # Simple per-user settings
     c.execute(
         """
         CREATE TABLE IF NOT EXISTS settings (
-            user_id INTEGER PRIMARY KEY REFERENCES users(id),
+            user_id INTEGER PRIMARY KEY,
             show_contact INTEGER DEFAULT 1,
             allow_messages INTEGER DEFAULT 1,
-            dark_theme INTEGER DEFAULT 0
+            dark_theme INTEGER DEFAULT 0,
+            FOREIGN KEY(user_id) REFERENCES users(id)
         )
-        """
+    """
     )
 
     db.commit()
@@ -166,7 +177,7 @@ TEMPLATE = """
     <style>
         body {
             font-family: Arial, sans-serif;
-            background: url("{{ url_for('static', filename='images/background.png') }}") no-repeat center center fixed;
+            background: url("{{ url_for('static', filename='images/background.jpg') }}") no-repeat center center fixed;
             background-size: cover;
             margin: 0;
         }
@@ -366,8 +377,7 @@ def current_user():
     db = get_db()
     c = db.cursor()
     c.execute(
-        "SELECT id, username, contact, bio, location, profile_image, website "
-        "FROM users WHERE id=%s",
+        "SELECT id, username, contact, bio, location, profile_image, website FROM users WHERE id=?",
         (session["user_id"],),
     )
     row = c.fetchone()
@@ -494,7 +504,7 @@ def search():
     # owners
     c.execute(
         "SELECT id, username, location FROM users "
-        "WHERE username ILIKE %s OR location ILIKE %s OR created_at ILIKE %s "
+        "WHERE username LIKE ? OR location LIKE ? OR created_at LIKE ? "
         "ORDER BY id DESC",
         (like, like, like),
     )
@@ -504,7 +514,7 @@ def search():
     c.execute(
         "SELECT i.id, i.title, i.location, i.capacity, u.username "
         "FROM icecans i JOIN users u ON u.id = i.owner_id "
-        "WHERE i.title ILIKE %s OR i.description ILIKE %s OR i.location ILIKE %s OR i.created_at ILIKE %s "
+        "WHERE i.title LIKE ? OR i.description LIKE ? OR i.location LIKE ? OR i.created_at LIKE ? "
         "ORDER BY i.id DESC",
         (like, like, like, like),
     )
@@ -514,7 +524,7 @@ def search():
     c.execute(
         "SELECT p.id, p.content, p.image_url, p.created_at, u.username, u.id "
         "FROM posts p JOIN users u ON u.id = p.owner_id "
-        "WHERE p.content ILIKE %s OR p.created_at ILIKE %s "
+        "WHERE p.content LIKE ? OR p.created_at LIKE ? "
         "ORDER BY p.id DESC",
         (like, like),
     )
@@ -622,7 +632,7 @@ def register():
         c.execute(
             """
             INSERT INTO users (username, password, contact, bio, location, profile_image, website, created_at)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+            VALUES (?,?,?,?,?,?,?,?)
             """,
             (
                 username,
@@ -637,19 +647,18 @@ def register():
         )
         db.commit()
 
-        c.execute("SELECT id FROM users WHERE username=%s", (username,))
+        # get id
+        c.execute("SELECT id FROM users WHERE username=?", (username,))
         user_id = c.fetchone()[0]
-
+        # default settings
         c.execute(
-            "INSERT INTO settings (user_id, show_contact, allow_messages, dark_theme) VALUES (%s,%s,%s,%s)",
+            "INSERT INTO settings (user_id, show_contact, allow_messages, dark_theme) VALUES (?,?,?,?)",
             (user_id, 1, 1, 0),
         )
         db.commit()
-
         session["user_id"] = user_id
         flash("Registration successful. You are now logged in.", "info")
-    except IntegrityError:
-        db.rollback()
+    except sqlite3.IntegrityError:
         flash("Username already exists. Please choose another.", "error")
     finally:
         db.close()
@@ -665,8 +674,7 @@ def login():
     db = get_db()
     c = db.cursor()
     c.execute(
-        "SELECT id FROM users WHERE username=%s AND password=%s",
-        (username, password),
+        "SELECT id FROM users WHERE username=? AND password=?", (username, password)
     )
     row = c.fetchone()
     db.close()
@@ -759,7 +767,7 @@ def create_icecan():
     c.execute(
         """
         INSERT INTO icecans (title, description, location, capacity, quote, image_url, owner_id, created_at)
-        VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+        VALUES (?,?,?,?,?,?,?,?)
         """,
         (
             title,
@@ -785,7 +793,7 @@ def icecan_detail(icecan_id):
     c.execute(
         "SELECT i.id, i.title, i.description, i.location, i.capacity, i.quote, "
         "i.image_url, i.created_at, u.id, u.username, u.location "
-        "FROM icecans i JOIN users u ON u.id = i.owner_id WHERE i.id=%s",
+        "FROM icecans i JOIN users u ON u.id = i.owner_id WHERE i.id=?",
         (icecan_id,),
     )
     i = c.fetchone()
@@ -794,7 +802,7 @@ def icecan_detail(icecan_id):
     if i:
         c.execute(
             "SELECT u.id, u.username FROM interested it "
-            "JOIN users u ON u.id = it.user_id WHERE it.icecan_id=%s",
+            "JOIN users u ON u.id = it.user_id WHERE it.icecan_id=?",
             (icecan_id,),
         )
         interested_users = c.fetchall()
@@ -810,7 +818,7 @@ def icecan_detail(icecan_id):
         db = get_db()
         c = db.cursor()
         c.execute(
-            "SELECT 1 FROM interested WHERE user_id=%s AND icecan_id=%s",
+            "SELECT 1 FROM interested WHERE user_id=? AND icecan_id=?",
             (user["id"], icecan_id),
         )
         is_interested = c.fetchone() is not None
@@ -825,7 +833,7 @@ def icecan_detail(icecan_id):
             <a href="{{ url_for('profile', user_id=i[8]) }}"><b>{{ i[9] }}</b></a>
             {% if i[10] %}
                 · Location: {{ i[10] }}
-                · <a href="https://www.google.com/maps/search/{{ i[3] }}" target="_blank">View on map</a>
+                · <a href="https://www.google.com/maps/search/{{ i[3] | urlencode }}" target="_blank">View on map</a>
             {% endif %}
         </div>
         <p>{{ i[2] or 'No description.' }}</p>
@@ -845,7 +853,7 @@ def icecan_detail(icecan_id):
             </form>
 
             <a class="pill-btn" href="{{ url_for('messages_page', with_user=i[8]) }}">Message owner</a>
-            <a class="pill-btn" href="https://www.google.com/maps/search/{{ i[3] }}" target="_blank">
+            <a class="pill-btn" href="https://www.google.com/maps/search/{{ i[3] | urlencode }}" target="_blank">
                 View service location
             </a>
         {% else %}
@@ -884,19 +892,19 @@ def toggle_interested(icecan_id):
     db = get_db()
     c = db.cursor()
     c.execute(
-        "SELECT 1 FROM interested WHERE user_id=%s AND icecan_id=%s",
+        "SELECT 1 FROM interested WHERE user_id=? AND icecan_id=?",
         (user["id"], icecan_id),
     )
     exists = c.fetchone() is not None
     if exists:
         c.execute(
-            "DELETE FROM interested WHERE user_id=%s AND icecan_id=%s",
+            "DELETE FROM interested WHERE user_id=? AND icecan_id=?",
             (user["id"], icecan_id),
         )
         flash("Removed from Interested.", "info")
     else:
         c.execute(
-            "INSERT INTO interested (user_id, icecan_id, created_at) VALUES (%s,%s,%s)",
+            "INSERT INTO interested (user_id, icecan_id, created_at) VALUES (?,?,?)",
             (user["id"], icecan_id, datetime.utcnow().isoformat()),
         )
         flash("Marked as Interested.", "info")
@@ -943,7 +951,7 @@ def profile(user_id):
 
     c.execute(
         "SELECT id, username, contact, bio, location, profile_image, website, created_at "
-        "FROM users WHERE id=%s",
+        "FROM users WHERE id=?",
         (user_id,),
     )
     u = c.fetchone()
@@ -953,47 +961,50 @@ def profile(user_id):
         return redirect(url_for("owners"))
 
     c.execute(
-        "SELECT id, title, location, capacity FROM icecans WHERE owner_id=%s ORDER BY id DESC",
+        "SELECT id, title, location, capacity FROM icecans WHERE owner_id=? ORDER BY id DESC",
         (user_id,),
     )
     services = c.fetchall()
 
     c.execute(
-        "SELECT id, url, description, created_at FROM websites WHERE owner_id=%s ORDER BY id DESC",
+        "SELECT id, url, description, created_at FROM websites WHERE owner_id=? ORDER BY id DESC",
         (user_id,),
     )
     websites = c.fetchall()
 
     c.execute(
-        "SELECT id, name, description, created_at FROM materials WHERE owner_id=%s ORDER BY id DESC",
+        "SELECT id, name, description, created_at FROM materials WHERE owner_id=? ORDER BY id DESC",
         (user_id,),
     )
     materials = c.fetchall()
 
     c.execute(
-        "SELECT id, content, image_url, created_at FROM posts WHERE owner_id=%s ORDER BY id DESC",
+        "SELECT p.id, p.content, p.image_url, p.created_at "
+        "FROM posts p WHERE p.owner_id=? ORDER BY p.id DESC",
         (user_id,),
     )
     posts = c.fetchall()
 
+    # followers & following count
     c.execute(
-        "SELECT COUNT(*) FROM follows WHERE followed_id=%s", (user_id,)
+        "SELECT COUNT(*) FROM follows WHERE followed_id=?", (user_id,)
     )
     followers_count = c.fetchone()[0]
     c.execute(
-        "SELECT COUNT(*) FROM follows WHERE follower_id=%s", (user_id,)
+        "SELECT COUNT(*) FROM follows WHERE follower_id=?", (user_id,)
     )
     following_count = c.fetchone()[0]
 
     db.close()
 
+    # is current user following?
     user = current_user()
     is_following = False
     if user:
         db = get_db()
         c = db.cursor()
         c.execute(
-            "SELECT 1 FROM follows WHERE follower_id=%s AND followed_id=%s",
+            "SELECT 1 FROM follows WHERE follower_id=? AND followed_id=?",
             (user["id"], user_id),
         )
         is_following = c.fetchone() is not None
@@ -1012,7 +1023,7 @@ def profile(user_id):
                     Joined: {{ u[7] }}<br>
                     {% if u[4] %}
                         Location: {{ u[4] }}
-                        · <a href="https://www.google.com/maps/search/{{ u[4] }}" target="_blank">View on map</a><br>
+                        · <a href="https://www.google.com/maps/search/{{ u[4] | urlencode }}" target="_blank">View on map</a><br>
                     {% endif %}
                     {% if u[2] %}
                         Contact: {{ u[2] }}<br>
@@ -1121,19 +1132,19 @@ def toggle_follow(user_id):
     db = get_db()
     c = db.cursor()
     c.execute(
-        "SELECT 1 FROM follows WHERE follower_id=%s AND followed_id=%s",
+        "SELECT 1 FROM follows WHERE follower_id=? AND followed_id=?",
         (me["id"], user_id),
     )
     exists = c.fetchone() is not None
     if exists:
         c.execute(
-            "DELETE FROM follows WHERE follower_id=%s AND followed_id=%s",
+            "DELETE FROM follows WHERE follower_id=? AND followed_id=?",
             (me["id"], user_id),
         )
         flash("Unfollowed user.", "info")
     else:
         c.execute(
-            "INSERT INTO follows (follower_id, followed_id, created_at) VALUES (%s,%s,%s)",
+            "INSERT INTO follows (follower_id, followed_id, created_at) VALUES (?,?,?)",
             (me["id"], user_id, datetime.utcnow().isoformat()),
         )
         flash("Now following this user.", "info")
@@ -1159,7 +1170,7 @@ def create_post():
     db = get_db()
     c = db.cursor()
     c.execute(
-        "INSERT INTO posts (owner_id, content, image_url, created_at) VALUES (%s,%s,%s,%s)",
+        "INSERT INTO posts (owner_id, content, image_url, created_at) VALUES (?,?,?,?)",
         (user["id"], content, image_url, datetime.utcnow().isoformat()),
     )
     db.commit()
@@ -1183,7 +1194,7 @@ def websites_page():
             db = get_db()
             c = db.cursor()
             c.execute(
-                "INSERT INTO websites (owner_id, url, description, created_at) VALUES (%s,%s,%s,%s)",
+                "INSERT INTO websites (owner_id, url, description, created_at) VALUES (?,?,?,?)",
                 (user["id"], url_txt, desc, datetime.utcnow().isoformat()),
             )
             db.commit()
@@ -1250,7 +1261,7 @@ def materials_page():
             db = get_db()
             c = db.cursor()
             c.execute(
-                "INSERT INTO materials (owner_id, name, description, created_at) VALUES (%s,%s,%s,%s)",
+                "INSERT INTO materials (owner_id, name, description, created_at) VALUES (?,?,?,?)",
                 (user["id"], name, desc, datetime.utcnow().isoformat()),
             )
             db.commit()
@@ -1321,30 +1332,29 @@ def messages_page():
     # conversation list (users you talked to)
     c.execute(
         "SELECT DISTINCT "
-        "CASE WHEN sender_id=%s THEN receiver_id ELSE sender_id END AS other_id "
-        "FROM messages WHERE sender_id=%s OR receiver_id=%s",
+        "CASE WHEN sender_id=? THEN receiver_id ELSE sender_id END AS other_id "
+        "FROM messages WHERE sender_id=? OR receiver_id=?",
         (user["id"], user["id"], user["id"]),
     )
     ids = [row[0] for row in c.fetchall()]
     convos = []
     if ids:
-        placeholders = ",".join(["%s"] * len(ids))
+        q_marks = ",".join("?" for _ in ids)
         c.execute(
-            f"SELECT id, username FROM users WHERE id IN ({placeholders})",
-            tuple(ids),
+            f"SELECT id, username FROM users WHERE id IN ({q_marks})", tuple(ids)
         )
         convos = c.fetchall()
 
     messages = []
     other_user = None
     if with_user:
-        c.execute("SELECT id, username FROM users WHERE id=%s", (with_user,))
+        c.execute("SELECT id, username FROM users WHERE id=?", (with_user,))
         other_user = c.fetchone()
         if other_user:
             c.execute(
                 "SELECT sender_id, receiver_id, content, created_at "
                 "FROM messages "
-                "WHERE (sender_id=%s AND receiver_id=%s) OR (sender_id=%s AND receiver_id=%s) "
+                "WHERE (sender_id=? AND receiver_id=?) OR (sender_id=? AND receiver_id=?) "
                 "ORDER BY id ASC",
                 (user["id"], with_user, with_user, user["id"]),
             )
@@ -1415,7 +1425,7 @@ def send_message(user_id):
     db = get_db()
     c = db.cursor()
     c.execute(
-        "INSERT INTO messages (sender_id, receiver_id, content, created_at) VALUES (%s,%s,%s,%s)",
+        "INSERT INTO messages (sender_id, receiver_id, content, created_at) VALUES (?,?,?,?)",
         (user["id"], user_id, content, datetime.utcnow().isoformat()),
     )
     db.commit()
@@ -1439,14 +1449,14 @@ def settings_page():
         allow_messages = 1 if request.form.get("allow_messages") == "on" else 0
         dark_theme = 1 if request.form.get("dark_theme") == "on" else 0
         c.execute(
-            "UPDATE settings SET show_contact=%s, allow_messages=%s, dark_theme=%s WHERE user_id=%s",
+            "UPDATE settings SET show_contact=?, allow_messages=?, dark_theme=? WHERE user_id=?",
             (show_contact, allow_messages, dark_theme, user["id"]),
         )
         db.commit()
         flash("Settings updated.", "info")
 
     c.execute(
-        "SELECT show_contact, allow_messages, dark_theme FROM settings WHERE user_id=%s",
+        "SELECT show_contact, allow_messages, dark_theme FROM settings WHERE user_id=?",
         (user["id"],),
     )
     s = c.fetchone()
