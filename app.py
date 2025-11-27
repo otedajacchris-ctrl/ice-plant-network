@@ -396,8 +396,20 @@ def current_user():
 
 
 def render_page(tab, body_html, **kwargs):
+    # 1) Render the inner body template with its variables
+    inner_html = render_template_string(
+        body_html,
+        tab=tab,
+        user=current_user(),
+        **kwargs
+    )
+
+    # 2) Put that rendered HTML inside the main TEMPLATE
     return render_template_string(
-        TEMPLATE, tab=tab, body=body_html, user=current_user(), **kwargs
+        TEMPLATE,
+        tab=tab,
+        user=current_user(),
+        body=inner_html
     )
 
 
@@ -1491,3 +1503,4 @@ def settings_page():
 
 if __name__ == "__main__":
     app.run(debug=True)
+
