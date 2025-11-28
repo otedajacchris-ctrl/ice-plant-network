@@ -355,7 +355,7 @@ TEMPLATE = """
         <div class="nav">
             <a href="{{ url_for('home') }}" class="{% if tab=='home' %}active{% endif %}">Home</a>
             <a href="{{ url_for('icecans') }}" class="{% if tab=='icecans' %}active{% endif %}">Ice Cans / Services</a>
-            <a href="{{ url_for('owners') }}" class="{% if tab=='owners' %}active{% endif %}">Owners</a>
+            <a href="{{ url_for('owners') }}" class="{% if tab=='owners' %}active{% endif %}">Members</a>
             <a href="{{ url_for('websites_page') }}" class="{% if tab=='websites' %}active{% endif %}">Websites</a>
             <a href="{{ url_for('materials_page') }}" class="{% if tab=='materials' %}active{% endif %}">Materials</a>
             <a href="{{ url_for('messages_page') }}" class="{% if tab=='messages' %}active{% endif %}">Messenger</a>
@@ -1593,4 +1593,5 @@ def settings_page():
 
 if __name__ == "__main__":
     app.run(debug=True)
+
 
