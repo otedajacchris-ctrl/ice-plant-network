@@ -603,7 +603,7 @@ def search():
     <div class="card">
         <h2>Search results for "{{ q }}"</h2>
 
-        <h3>Owners</h3>
+        <h3>Members</h3>
         {% if owners %}
             {% for o in owners %}
                 <div class="user-card">
@@ -1593,3 +1593,4 @@ def settings_page():
 
 if __name__ == "__main__":
     app.run(debug=True)
+
