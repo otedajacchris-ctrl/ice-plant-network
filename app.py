@@ -17,6 +17,9 @@ from flask import (
 from werkzeug.utils import secure_filename
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.path.join(BASE_DIR, "database.db")
+
+
 
 UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads")
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -1605,6 +1608,7 @@ def settings_page():
 
 if __name__ == "__main__":
     app.run(debug=True)
+
 
 
 
