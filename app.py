@@ -33,15 +33,6 @@ def init_db():
     db = get_db()
     c = db.cursor()
 
-    c.execute("""
-    CREATE TABLE IF NOT EXISTS users(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        username TEXT UNIQUE,
-        password TEXT
-        )
-    """
-    )
-
     # Users / owners
     c.execute(
         """
@@ -189,10 +180,6 @@ TEMPLATE = """
 <head>
     <title>3JMCO Hive</title>
     <style>
-        button:active {
-            transform: scale(0.95);
-            box-shadow: 0 0 10px #0f9b0f;
-        }
         body {
             font-family: Arial, sans-serif;
             background: url("{{ url_for('static', filename='images/background.png') }}") no-repeat center center fixed;
@@ -267,9 +254,14 @@ TEMPLATE = """
             border-radius: 6px;
             cursor: pointer;
             font-weight: bold;
+            transition: transform 0.08s ease, box-shadow 0.08s ease;
         }
         button:hover {
             background: #0c7a0c;
+        }
+        button:active {
+            transform: scale(0.96);
+            box-shadow: 0 0 10px #0f9b0f;
         }
         .messages {
             margin-bottom: 10px;
@@ -402,127 +394,106 @@ TEMPLATE = """
 </html>
 """
 
-# ---------- HELPERS ----------
+# ---------- INTRO TEMPLATE (ANIMATED) ----------
+
 INTRO_TEMPLATE = """
 <!DOCTYPE html>
 <html>
 <head>
 <title>3JMCO Hive</title>
 <style>
-body{
-background:black;
-margin:0;
-display:flex;
-justify-content:center;
-align-items:center;
-height:100vh;
-color:white;
-overflow:hidden;
-font-family:Arial;
-}
-.intro{
-text-align:center;
-animation: fadeOut 4s forwards;
-}
-.logo{
-font-size:64px;
-font-weight:bold;
-color:#00ffcc;
-text-shadow:0 0 15px #00ffcc,0 0 40px #0f9bff;
-animation: glow 2s infinite alternate;
-}
-.gear{
-margin:20px auto;
-width:80px;
-height:80px;
-border-radius:50%;
-border:6px solid #00ffcc;
-border-top-color:#0f9bff;
-animation: spin 2s linear infinite;
-}
-@keyframes spin{to{transform:rotate(360deg);}}
-@keyframes glow{
-from{text-shadow:0 0 10px #00ffcc;}
-to{text-shadow:0 0 40px #00ffcc,0 0 80px #0f9bff;}
-}
-@keyframes fadeOut{
-0%{opacity:1;}
-80%{opacity:1;}
-100%{opacity:0;}
-}
-</style>
+    body {
+        background: #000;
+        margin: 0;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        color: white;
+        overflow: hidden;
+        font-family: Arial, sans-serif;
+    }
+    .intro {
+        text-align: center;
+        animation: fadeOut 3.4s forwards;
+    }
+    .logo-text {
+        font-size: 64px;
+        font-weight: bold;
+        letter-spacing: 4px;
+        color: #00ffcc;
+        text-shadow: 0 0 15px #00ffcc, 0 0 40px #0f9bff;
+        animation: glow 1.8s infinite alternate, float 3s ease-in-out infinite;
+    }
+    .subtitle {
+        margin-top: 8px;
+        font-size: 16px;
+        color: #88ffff;
+        opacity: 0.9;
+    }
+    .gear {
+        margin: 25px auto;
+        width: 90px;
+        height: 90px;
+        border-radius: 50%;
+        border: 6px solid #00ffcc;
+        border-top-color: #0f9bff;
+        box-shadow: 0 0 20px #00ffcc;
+        animation: spin 1.4s linear infinite;
+        position: relative;
+    }
+    .gear::before,
+    .gear::after {
+        content: "";
+        position: absolute;
+        inset: 20%;
+        border-radius: 50%;
+        border: 3px dashed #0f9bff;
+        opacity: 0.6;
+        animation: spin 3s linear infinite reverse;
+    }
+    .loading {
+        margin-top: 10px;
+        font-size: 14px;
+        letter-spacing: 2px;
+        color: #44ffee;
+    }
 
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+    @keyframes glow {
+        from { text-shadow: 0 0 10px #00ffcc; }
+        to { text-shadow: 0 0 40px #00ffcc, 0 0 80px #0f9bff; }
+    }
+    @keyframes fadeOut {
+        0% { opacity: 1; }
+        80% { opacity: 1; }
+        100% { opacity: 0; }
+    }
+    @keyframes float {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-6px); }
+    }
+</style>
 <script>
-setTimeout(()=>{
-window.location="{{ next }}";
-},3300);
+    setTimeout(function() {
+        window.location = "{{ next }}";
+    }, 3300);
 </script>
 </head>
 <body>
 <div class="intro">
-<div class="logo">3JMCO HIVE</div>
-<div class="gear"></div>
-<div>Stainless Steel Fabrication Network</div>
+    <div class="logo-text">3JMCO HIVE</div>
+    <div class="subtitle">Stainless Steel Fabrication Network</div>
+    <div class="gear"></div>
+    <div class="loading">LOADING...</div>
 </div>
 </body>
 </html>
 """
 
-@app.route("/intro")
-def intro():
-    if not session.get("intro_seen"):
-        session["intro_seen"] = True
-        session["after_intro"] = url_for("home")
-
-    body = """
-    <div class="intro-screen">
-        <h1 class="neon">3JMCO HIVE</h1>
-        <div class="gear"></div>
-        <p>Loading...</p>
-
-        <script>
-            setTimeout(function(){
-                window.location.href = "{{ session.get('after_intro', url_for('home')) }}";
-            }, 3000);
-        </script>
-    </div>
-
-    <style>
-        body {
-            background:black;
-        }
-        .intro-screen {
-            height:100vh;
-            display:flex;
-            flex-direction:column;
-            justify-content:center;
-            align-items:center;
-            color:#00ffcc;
-        }
-        .neon {
-            font-size:50px;
-            animation: glow 1s infinite alternate;
-        }
-        @keyframes glow {
-            from { text-shadow:0 0 5px #0ff; }
-            to { text-shadow:0 0 20px #0f0; }
-        }
-        .gear {
-            width:80px;
-            height:80px;
-            border:6px solid #0ff;
-            border-radius:50%;
-            margin:15px;
-            animation: spin 2s linear infinite;
-        }
-        @keyframes spin {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
-        }
-    </style>
-    """
-    return render_page("intro", body)
-
+# ---------- HELPERS ----------
 
 def current_user():
     if "user_id" not in session:
@@ -598,10 +569,23 @@ def save_uploaded_file(field_name, subfolder=""):
     return f"/uploads/{rel}"
 
 
+def ensure_intro(target_endpoint, **values):
+    """
+    Show intro once before first entering the app (home) in this session.
+    For login/register we manually redirect to /intro, regardless of this flag.
+    """
+    if not session.get("intro_seen"):
+        session["intro_seen"] = True
+        session["after_intro"] = url_for(target_endpoint, **values)
+        return redirect(url_for("intro"))
+    return None
+
+
 @app.route("/intro")
 def intro():
     next_page = session.pop("after_intro", url_for("home"))
     return render_template_string(INTRO_TEMPLATE, next=next_page)
+
 
 @app.route("/uploads/<path:filename>")
 def uploaded_file(filename):
@@ -613,6 +597,11 @@ def uploaded_file(filename):
 
 @app.route("/")
 def home():
+    # Intro before first "entering" the app in this session
+    intro_redirect = ensure_intro("home")
+    if intro_redirect:
+        return intro_redirect
+
     db = get_db()
     c = db.cursor()
 
@@ -839,6 +828,7 @@ def login_page():
     """
     return render_page("auth", body)
 
+
 @app.route("/register", methods=["POST"])
 def register():
     username = request.form["username"].strip()
@@ -889,12 +879,17 @@ def register():
         db.commit()
         session["user_id"] = user_id
         flash("Registration successful. You are now logged in.", "info")
+
+        # After sign-up, always show intro, then go home
+        session["after_intro"] = url_for("home")
+        return redirect(url_for("intro"))
+
     except sqlite3.IntegrityError:
         flash("Username already exists. Please choose another.", "error")
     finally:
         db.close()
 
-    return redirect(url_for("home"))
+    return redirect(url_for("login_page"))
 
 
 @app.route("/login", methods=["POST"])
@@ -911,10 +906,11 @@ def login():
     db.close()
 
     if row:
-        session["user_id"] = user_id
-        session.pop("intro_seen", None)
-        session["after_intro"] = url_for("home")
+        session["user_id"] = row[0]
         flash("Login successful.", "info")
+
+        # After login, always show intro then go home
+        session["after_intro"] = url_for("home")
         return redirect(url_for("intro"))
     else:
         flash("Invalid username or password.", "error")
@@ -986,6 +982,7 @@ def icecans():
     """
     return render_page("icecans", body, icecans=icecans)
 
+
 @app.route("/icecans/create", methods=["POST"])
 def create_icecan():
     if not require_login():
@@ -1027,6 +1024,7 @@ def create_icecan():
     db.close()
     flash("Ice can / service created.", "info")
     return redirect(url_for("icecans"))
+
 
 @app.route("/icecans/<int:icecan_id>")
 def icecan_detail(icecan_id):
@@ -1424,6 +1422,7 @@ def create_post():
     flash("Post created.", "info")
     return redirect(url_for("home"))
 
+
 # ---------- WEBSITES & MATERIALS ----------
 
 @app.route("/websites", methods=["GET", "POST"])
@@ -1732,4 +1731,3 @@ def settings_page():
 
 if __name__ == "__main__":
     app.run(debug=True)
-
