@@ -172,7 +172,7 @@ def init_db():
 
 init_db()
 
-# ---------- TEMPLATE SHELL ----------
+# ---------- TEMPLATE SHELL (MAIN LAYOUT + TRANSITIONS) ----------
 
 TEMPLATE = """
 <!DOCTYPE html>
@@ -189,6 +189,13 @@ TEMPLATE = """
         .page {
             background: #00000066;
             min-height: 100vh;
+            opacity: 0;
+            transform: translateY(10px);
+            transition: opacity 0.35s ease, transform 0.35s ease;
+        }
+        .page.page-slide-in {
+            opacity: 1;
+            transform: translateY(0);
         }
         .container {
             width: 95%;
@@ -254,7 +261,7 @@ TEMPLATE = """
             border-radius: 6px;
             cursor: pointer;
             font-weight: bold;
-            transition: transform 0.08s ease, box-shadow 0.08s ease;
+            transition: transform 0.08s ease, box-shadow 0.08s ease, background 0.15s ease;
         }
         button:hover {
             background: #0c7a0c;
@@ -327,6 +334,71 @@ TEMPLATE = """
             text-decoration: none;
             margin-right: 6px;
         }
+
+        /* Route transition overlay */
+        .route-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.88);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+            z-index: 9999;
+        }
+        .route-overlay.show {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .route-overlay-content {
+            text-align: center;
+            color: #00ffcc;
+            font-size: 26px;
+            letter-spacing: 2px;
+            text-shadow: 0 0 10px #00ffcc, 0 0 20px #0f9bff;
+            animation: routeSlideUp 0.35s ease-out forwards;
+        }
+        .route-overlay-label {
+            margin-top: 8px;
+            font-size: 16px;
+            color: #88ffff;
+        }
+        .route-overlay-gear {
+            margin: 15px auto;
+            width: 70px;
+            height: 70px;
+            border-radius: 50%;
+            border: 4px solid #00ffcc;
+            border-top-color: #0f9bff;
+            box-shadow: 0 0 15px #00ffcc;
+            animation: spin 1.2s linear infinite;
+            position: relative;
+        }
+        .route-overlay-gear::before {
+            content: "";
+            position: absolute;
+            inset: 20%;
+            border-radius: 50%;
+            border: 3px dashed #0f9bff;
+            opacity: 0.7;
+            animation: spin 3s linear infinite reverse;
+        }
+
+        @keyframes routeSlideUp {
+            from {
+                transform: translateY(40px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
     </style>
     <script>
         function togglePassword(fieldId, toggleId) {
@@ -342,10 +414,89 @@ TEMPLATE = """
                 if (toggle) toggle.textContent = "Show";
             }
         }
+
+        document.addEventListener("DOMContentLoaded", function () {
+            // Slide-in animation for page (on refresh / direct open)
+            const page = document.querySelector(".page");
+            if (page) {
+                requestAnimationFrame(function () {
+                    page.classList.add("page-slide-in");
+                });
+            }
+
+            const overlay = document.getElementById("route-overlay");
+            const labelEl = document.getElementById("route-overlay-label");
+            const titleEl = document.getElementById("route-overlay-title");
+
+            function showOverlay(text) {
+                if (!overlay) return;
+                if (labelEl) {
+                    labelEl.textContent = text || "Loading...";
+                }
+                if (titleEl) {
+                    titleEl.textContent = "3JMCO HIVE";
+                }
+                overlay.classList.add("show");
+            }
+
+            function handleLinkClick(e) {
+                const a = e.currentTarget;
+                const href = a.getAttribute("href");
+
+                if (!href) return;
+
+                // Don't intercept external or new-tab links or anchors
+                const isExternal = href.startsWith("http") && !href.startsWith(window.location.origin);
+                if (isExternal || a.target === "_blank" || href.startsWith("#")) {
+                    return;
+                }
+
+                e.preventDefault();
+
+                let label = a.dataset.transitionLabel || "";
+
+                // If no custom label, decide by current page (leaving) or target (entering)
+                if (!label) {
+                    const path = window.location.pathname || "";
+                    if (path.startsWith("/settings")) {
+                        label = "Going on...";
+                    } else if (path.startsWith("/profile")) {
+                        label = "Going to user...";
+                    } else if (href.startsWith("{{ url_for('settings_page') }}")) {
+                        label = "Going on...";
+                    } else if (href.startsWith("{{ url_for('profile', user_id=0)[:-1] }}")) {
+                        // crude match for /profile/<id>
+                        label = "Going to user...";
+                    } else {
+                        label = "Loading...";
+                    }
+                }
+
+                showOverlay(label);
+
+                setTimeout(function () {
+                    window.location = href;
+                }, 350);
+            }
+
+            // Attach to all internal nav links we mark with data-transition="true"
+            const links = document.querySelectorAll("a[data-transition='true']");
+            links.forEach(function (a) {
+                a.addEventListener("click", handleLinkClick);
+            });
+        });
     </script>
 
 </head>
 <body>
+<div id="route-overlay" class="route-overlay">
+    <div class="route-overlay-content">
+        <div id="route-overlay-title">3JMCO HIVE</div>
+        <div class="route-overlay-gear"></div>
+        <div id="route-overlay-label" class="route-overlay-label">Loading...</div>
+    </div>
+</div>
+
 <div class="page">
 <div class="container">
 
@@ -358,18 +509,18 @@ TEMPLATE = """
             </div>
         </div>
         <div class="nav">
-            <a href="{{ url_for('home') }}" class="{% if tab=='home' %}active{% endif %}">Home</a>
-            <a href="{{ url_for('icecans') }}" class="{% if tab=='icecans' %}active{% endif %}">Ice Cans / Services</a>
-            <a href="{{ url_for('owners') }}" class="{% if tab=='owners' %}active{% endif %}">Members</a>
-            <a href="{{ url_for('websites_page') }}" class="{% if tab=='websites' %}active{% endif %}">Websites</a>
-            <a href="{{ url_for('materials_page') }}" class="{% if tab=='materials' %}active{% endif %}">Materials</a>
-            <a href="{{ url_for('messages_page') }}" class="{% if tab=='messages' %}active{% endif %}">Messenger</a>
+            <a href="{{ url_for('home') }}" data-transition="true" class="{% if tab=='home' %}active{% endif %}">Home</a>
+            <a href="{{ url_for('icecans') }}" data-transition="true" class="{% if tab=='icecans' %}active{% endif %}">Ice Cans / Services</a>
+            <a href="{{ url_for('owners') }}" data-transition="true" class="{% if tab=='owners' %}active{% endif %}">Members</a>
+            <a href="{{ url_for('websites_page') }}" data-transition="true" class="{% if tab=='websites' %}active{% endif %}">Websites</a>
+            <a href="{{ url_for('materials_page') }}" data-transition="true" class="{% if tab=='materials' %}active{% endif %}">Materials</a>
+            <a href="{{ url_for('messages_page') }}" data-transition="true" class="{% if tab=='messages' %}active{% endif %}">Messenger</a>
             {% if user %}
-                <a href="{{ url_for('profile', user_id=user['id']) }}" class="{% if tab=='profile' %}active{% endif %}">Profile</a>
-                <a href="{{ url_for('settings_page') }}" class="{% if tab=='settings' %}active{% endif %}">Settings</a>
-                <a href="{{ url_for('logout') }}">Logout</a>
+                <a href="{{ url_for('profile', user_id=user['id']) }}" data-transition="true" data-transition-label="Going to user..." class="{% if tab=='profile' %}active{% endif %}">Profile</a>
+                <a href="{{ url_for('settings_page') }}" data-transition="true" data-transition-label="Going on..." class="{% if tab=='settings' %}active{% endif %}">Settings</a>
+                <a href="{{ url_for('logout') }}" data-transition="true" data-transition-label="Logging out...">Logout</a>
             {% else %}
-                <a href="{{ url_for('login_page') }}" class="{% if tab=='auth' %}active{% endif %}">Login / Register</a>
+                <a href="{{ url_for('login_page') }}" data-transition="true" class="{% if tab=='auth' %}active{% endif %}">Login / Register</a>
             {% endif %}
         </div>
     </div>
@@ -394,7 +545,7 @@ TEMPLATE = """
 </html>
 """
 
-# ---------- INTRO TEMPLATE (ANIMATED) ----------
+# ---------- INTRO TEMPLATE (SPLASH) ----------
 
 INTRO_TEMPLATE = """
 <!DOCTYPE html>
@@ -593,7 +744,6 @@ def uploaded_file(filename):
 
 
 # ---------- ROUTES: HOME / SEARCH / AUTH ----------
-
 
 @app.route("/")
 def home():
