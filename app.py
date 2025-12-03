@@ -33,6 +33,15 @@ def init_db():
     db = get_db()
     c = db.cursor()
 
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS users(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT UNIQUE,
+        password TEXT
+        )
+    """
+    )
+
     # Users / owners
     c.execute(
         """
@@ -180,6 +189,10 @@ TEMPLATE = """
 <head>
     <title>3JMCO Hive</title>
     <style>
+        button:active {
+            transform: scale(0.95);
+            box-shadow: 0 0 10px #0f9b0f;
+        }
         body {
             font-family: Arial, sans-serif;
             background: url("{{ url_for('static', filename='images/background.png') }}") no-repeat center center fixed;
@@ -390,6 +403,125 @@ TEMPLATE = """
 """
 
 # ---------- HELPERS ----------
+INTRO_TEMPLATE = """
+<!DOCTYPE html>
+<html>
+<head>
+<title>3JMCO Hive</title>
+<style>
+body{
+background:black;
+margin:0;
+display:flex;
+justify-content:center;
+align-items:center;
+height:100vh;
+color:white;
+overflow:hidden;
+font-family:Arial;
+}
+.intro{
+text-align:center;
+animation: fadeOut 4s forwards;
+}
+.logo{
+font-size:64px;
+font-weight:bold;
+color:#00ffcc;
+text-shadow:0 0 15px #00ffcc,0 0 40px #0f9bff;
+animation: glow 2s infinite alternate;
+}
+.gear{
+margin:20px auto;
+width:80px;
+height:80px;
+border-radius:50%;
+border:6px solid #00ffcc;
+border-top-color:#0f9bff;
+animation: spin 2s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg);}}
+@keyframes glow{
+from{text-shadow:0 0 10px #00ffcc;}
+to{text-shadow:0 0 40px #00ffcc,0 0 80px #0f9bff;}
+}
+@keyframes fadeOut{
+0%{opacity:1;}
+80%{opacity:1;}
+100%{opacity:0;}
+}
+</style>
+
+<script>
+setTimeout(()=>{
+window.location="{{ next }}";
+},3300);
+</script>
+</head>
+<body>
+<div class="intro">
+<div class="logo">3JMCO HIVE</div>
+<div class="gear"></div>
+<div>Stainless Steel Fabrication Network</div>
+</div>
+</body>
+</html>
+"""
+
+@app.route("/intro")
+def intro():
+    if not session.get("intro_seen"):
+        session["intro_seen"] = True
+        session["after_intro"] = url_for("home")
+
+    body = """
+    <div class="intro-screen">
+        <h1 class="neon">3JMCO HIVE</h1>
+        <div class="gear"></div>
+        <p>Loading...</p>
+
+        <script>
+            setTimeout(function(){
+                window.location.href = "{{ session.get('after_intro', url_for('home')) }}";
+            }, 3000);
+        </script>
+    </div>
+
+    <style>
+        body {
+            background:black;
+        }
+        .intro-screen {
+            height:100vh;
+            display:flex;
+            flex-direction:column;
+            justify-content:center;
+            align-items:center;
+            color:#00ffcc;
+        }
+        .neon {
+            font-size:50px;
+            animation: glow 1s infinite alternate;
+        }
+        @keyframes glow {
+            from { text-shadow:0 0 5px #0ff; }
+            to { text-shadow:0 0 20px #0f0; }
+        }
+        .gear {
+            width:80px;
+            height:80px;
+            border:6px solid #0ff;
+            border-radius:50%;
+            margin:15px;
+            animation: spin 2s linear infinite;
+        }
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+    </style>
+    """
+    return render_page("intro", body)
 
 
 def current_user():
@@ -465,6 +597,11 @@ def save_uploaded_file(field_name, subfolder=""):
     rel = f"{subfolder}/{filename}" if subfolder else filename
     return f"/uploads/{rel}"
 
+
+@app.route("/intro")
+def intro():
+    next_page = session.pop("after_intro", url_for("home"))
+    return render_template_string(INTRO_TEMPLATE, next=next_page)
 
 @app.route("/uploads/<path:filename>")
 def uploaded_file(filename):
@@ -774,9 +911,11 @@ def login():
     db.close()
 
     if row:
-        session["user_id"] = row[0]
+        session["user_id"] = user_id
+        session.pop("intro_seen", None)
+        session["after_intro"] = url_for("home")
         flash("Login successful.", "info")
-        return redirect(url_for("home"))
+        return redirect(url_for("intro"))
     else:
         flash("Invalid username or password.", "error")
         return redirect(url_for("login_page"))
@@ -1593,3 +1732,4 @@ def settings_page():
 
 if __name__ == "__main__":
     app.run(debug=True)
+
