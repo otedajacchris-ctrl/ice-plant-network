@@ -1,9 +1,6 @@
 import os
+import sqlite3
 from datetime import datetime
-
-import psycopg2
-from psycopg2.extras import DictCursor
-
 from flask import (
     Flask,
     render_template_string,
@@ -19,8 +16,6 @@ from werkzeug.utils import secure_filename
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, "database.db")
 
-
-
 UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads")
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
@@ -31,16 +26,7 @@ app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 # ---------- DATABASE SETUP ----------
 
 def get_db():
-    """
-    Returns a new PostgreSQL connection using DATABASE_URL env var.
-    We use DictCursor so we can access columns by name if we want.
-    """
-    db_url = os.environ.get("DATABASE_URL")
-    if not db_url:
-        raise RuntimeError("DATABASE_URL is not set")
-
-    conn = psycopg2.connect(db_url, cursor_factory=DictCursor)
-    return conn
+    return sqlite3.connect(DB_PATH)
 
 
 def init_db():
@@ -51,7 +37,7 @@ def init_db():
     c.execute(
         """
         CREATE TABLE IF NOT EXISTS users (
-            id SERIAL PRIMARY KEY,
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE,
             password TEXT,
             contact TEXT,
@@ -61,14 +47,14 @@ def init_db():
             website TEXT,
             created_at TEXT
         )
-        """
+    """
     )
 
     # Ice cans / services / projects
     c.execute(
         """
         CREATE TABLE IF NOT EXISTS icecans (
-            id SERIAL PRIMARY KEY,
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
             title TEXT,
             description TEXT,
             location TEXT,
@@ -79,7 +65,7 @@ def init_db():
             created_at TEXT,
             FOREIGN KEY(owner_id) REFERENCES users(id)
         )
-        """
+    """
     )
 
     # Follows (user → user)
@@ -93,7 +79,7 @@ def init_db():
             FOREIGN KEY(follower_id) REFERENCES users(id),
             FOREIGN KEY(followed_id) REFERENCES users(id)
         )
-        """
+    """
     )
 
     # Interested (user bookmarks ice can)
@@ -107,14 +93,14 @@ def init_db():
             FOREIGN KEY(user_id) REFERENCES users(id),
             FOREIGN KEY(icecan_id) REFERENCES icecans(id)
         )
-        """
+    """
     )
 
     # Direct messages
     c.execute(
         """
         CREATE TABLE IF NOT EXISTS messages (
-            id SERIAL PRIMARY KEY,
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
             sender_id INTEGER,
             receiver_id INTEGER,
             content TEXT,
@@ -122,49 +108,49 @@ def init_db():
             FOREIGN KEY(sender_id) REFERENCES users(id),
             FOREIGN KEY(receiver_id) REFERENCES users(id)
         )
-        """
+    """
     )
 
     # Websites (extra links)
     c.execute(
         """
         CREATE TABLE IF NOT EXISTS websites (
-            id SERIAL PRIMARY KEY,
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
             owner_id INTEGER,
             url TEXT,
             description TEXT,
             created_at TEXT,
             FOREIGN KEY(owner_id) REFERENCES users(id)
         )
-        """
+    """
     )
 
     # Materials (for fabrication, supplies, etc.)
     c.execute(
         """
         CREATE TABLE IF NOT EXISTS materials (
-            id SERIAL PRIMARY KEY,
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
             owner_id INTEGER,
             name TEXT,
             description TEXT,
             created_at TEXT,
             FOREIGN KEY(owner_id) REFERENCES users(id)
         )
-        """
+    """
     )
 
     # General posts with optional image
     c.execute(
         """
         CREATE TABLE IF NOT EXISTS posts (
-            id SERIAL PRIMARY KEY,
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
             owner_id INTEGER,
             content TEXT,
             image_url TEXT,
             created_at TEXT,
             FOREIGN KEY(owner_id) REFERENCES users(id)
         )
-        """
+    """
     )
 
     # Simple per-user settings
@@ -177,7 +163,7 @@ def init_db():
             dark_theme INTEGER DEFAULT 0,
             FOREIGN KEY(user_id) REFERENCES users(id)
         )
-        """
+    """
     )
 
     db.commit()
@@ -369,7 +355,7 @@ TEMPLATE = """
         <div class="nav">
             <a href="{{ url_for('home') }}" class="{% if tab=='home' %}active{% endif %}">Home</a>
             <a href="{{ url_for('icecans') }}" class="{% if tab=='icecans' %}active{% endif %}">Ice Cans / Services</a>
-            <a href="{{ url_for('owners') }}" class="{% if tab=='owners' %}active{% endif %}">Members</a>
+            <a href="{{ url_for('owners') }}" class="{% if tab=='owners' %}active{% endif %}">Owners</a>
             <a href="{{ url_for('websites_page') }}" class="{% if tab=='websites' %}active{% endif %}">Websites</a>
             <a href="{{ url_for('materials_page') }}" class="{% if tab=='materials' %}active{% endif %}">Materials</a>
             <a href="{{ url_for('messages_page') }}" class="{% if tab=='messages' %}active{% endif %}">Messenger</a>
@@ -617,7 +603,7 @@ def search():
     <div class="card">
         <h2>Search results for "{{ q }}"</h2>
 
-        <h3>Members</h3>
+        <h3>Owners</h3>
         {% if owners %}
             {% for o in owners %}
                 <div class="user-card">
@@ -782,8 +768,7 @@ def login():
     db = get_db()
     c = db.cursor()
     c.execute(
-        "SELECT id FROM users WHERE username=%s AND password=%s",
-        (username, password),
+        "SELECT id FROM users WHERE username=? AND password=?", (username, password)
     )
     row = c.fetchone()
     db.close()
@@ -1608,8 +1593,3 @@ def settings_page():
 
 if __name__ == "__main__":
     app.run(debug=True)
-
-
-
-
-
